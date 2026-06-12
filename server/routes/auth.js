@@ -11,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key-12345';
 // POST /api/auth/register - Sign up a new user (admin, client/user, astrologer)
 router.post('/register', async (req, res) => {
   try {
-    const { username, password, name, role, phone, dob, birthTime, birthPlace, specialization } = req.body;
+    const { username, password, name, role, gender, phone, dob, birthTime, birthPlace, specialization } = req.body;
     
     if (!username || !password || !name) {
       return res.status(400).json({ message: 'Username, password, and name are required fields.' });
@@ -21,8 +21,8 @@ router.post('/register', async (req, res) => {
 
     // Validate role-specific fields
     if (targetRole === 'user') {
-      if (!phone || !dob || !birthTime || !birthPlace) {
-        return res.status(400).json({ message: 'Phone, DOB, birth time, and birth place are required for client registration.' });
+      if (!gender) {
+        return res.status(400).json({ message: 'Gender is required for client registration.' });
       }
     } else if (targetRole === 'astrologer') {
       if (!specialization) {
@@ -46,10 +46,11 @@ router.post('/register', async (req, res) => {
     if (targetRole === 'user') {
       const newClient = new Client({
         name,
-        phone,
-        dob: new Date(dob),
-        birthTime,
-        birthPlace
+        gender,
+        phone: phone || '',
+        dob: dob ? new Date(dob) : null,
+        birthTime: birthTime || '',
+        birthPlace: birthPlace || ''
       });
       await newClient.save();
       clientRef = newClient._id;

@@ -6,23 +6,24 @@ const clientSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+    required: true
+  },
   phone: {
     type: String,
-    required: true,
     trim: true
   },
   dob: {
-    type: Date,
-    required: true
+    type: Date
   },
   birthTime: {
     type: String, // format e.g., "14:30"
-    required: true,
     trim: true
   },
   birthPlace: {
     type: String,
-    required: true,
     trim: true
   }
 }, {
@@ -30,3 +31,4 @@ const clientSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Client', clientSchema);
+

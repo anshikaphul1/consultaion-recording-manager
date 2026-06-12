@@ -11,10 +11,7 @@ const Register = () => {
   const [role, setRole] = useState('user'); // 'user', 'astrologer', 'admin'
   
   // Client specific fields
-  const [phone, setPhone] = useState('');
-  const [dob, setDob] = useState('');
-  const [birthTime, setBirthTime] = useState('');
-  const [birthPlace, setBirthPlace] = useState('');
+  const [gender, setGender] = useState('Male'); // 'Male', 'Female', 'Other'
   
   // Astrologer specific fields
   const [specialization, setSpecialization] = useState('');
@@ -37,10 +34,7 @@ const Register = () => {
     };
 
     if (role === 'user') {
-      payload.phone = phone;
-      payload.dob = dob;
-      payload.birthTime = birthTime;
-      payload.birthPlace = birthPlace;
+      payload.gender = gender;
     } else if (role === 'astrologer') {
       payload.specialization = specialization;
     }
@@ -69,10 +63,7 @@ const Register = () => {
     setPassword('user123');
     
     if (role === 'user') {
-      setPhone(`+91 98765 ${randomSuffix}`);
-      setDob('2000-01-01');
-      setBirthTime('12:00');
-      setBirthPlace('New Delhi, India');
+      setGender(randomSuffix % 2 === 0 ? 'Female' : 'Male');
     } else if (role === 'astrologer') {
       setSpecialization('Vedic Horary & Palmistry');
     }
@@ -164,68 +155,18 @@ const Register = () => {
           {/* DYNAMIC FIELDS FOR CLIENT/USER */}
           {role === 'user' && (
             <div style={{ borderTop: '1px dashed var(--glass-border)', marginTop: '1.5rem', paddingTop: '1.25rem' }}>
-              <h3 style={{ fontSize: '0.9rem', color: 'var(--accent-gold)', marginBottom: '1rem' }}>Astrological Chart Registration</h3>
-              
               <div className="form-group">
-                <label className="form-label">Phone Number</label>
-                <div style={{ position: 'relative' }}>
-                  <Phone size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="tel"
-                    className="form-control"
-                    placeholder="Enter phone number"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={{ paddingLeft: '36px' }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Date of Birth</label>
-                <div style={{ position: 'relative' }}>
-                  <Calendar size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    style={{ paddingLeft: '36px' }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Birth Time (Local)</label>
-                <div style={{ position: 'relative' }}>
-                  <Clock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="time"
-                    className="form-control"
-                    value={birthTime}
-                    onChange={(e) => setBirthTime(e.target.value)}
-                    style={{ paddingLeft: '36px' }}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Birth Place</label>
-                <div style={{ position: 'relative' }}>
-                  <MapPin size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="City, Country"
-                    value={birthPlace}
-                    onChange={(e) => setBirthPlace(e.target.value)}
-                    style={{ paddingLeft: '36px' }}
-                    required
-                  />
-                </div>
+                <label className="form-label">Gender</label>
+                <select 
+                  className="form-control"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  style={{ background: 'var(--bg-primary)' }}
+                >
+                  <option value="Male" style={{ background: 'var(--bg-primary)' }}>Male</option>
+                  <option value="Female" style={{ background: 'var(--bg-primary)' }}>Female</option>
+                  <option value="Other" style={{ background: 'var(--bg-primary)' }}>Other</option>
+                </select>
               </div>
             </div>
           )}
