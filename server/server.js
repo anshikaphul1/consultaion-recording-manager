@@ -1,6 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log(" MongoDB Connected"))
+  .catch(err => console.log(" MongoDB Error:", err));
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
@@ -66,18 +70,18 @@ app.get('/health', (req, res) => {
 async function seedDefaultAstrologers() {
   try {
     const defaultAstrologers = [
-      { 
-        name: 'Pandit Sri Raman', 
+      {
+        name: 'Pandit Sri Raman',
         specialization: 'Vedic Astrology & Gemology',
         photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop'
       },
-      { 
-        name: 'Dr. Anjali Sharma', 
+      {
+        name: 'Dr. Anjali Sharma',
         specialization: 'KP Astrology & Numerology',
         photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop'
       },
-      { 
-        name: 'Karthik Iyer', 
+      {
+        name: 'Karthik Iyer',
         specialization: 'Western Astrology & Horary',
         photoUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=250&auto=format&fit=crop'
       }
@@ -223,7 +227,7 @@ io.on('connection', (socket) => {
 
   socket.on('call-end', async ({ clientId, astrologerId }) => {
     console.log(`Call ended between Client: ${clientId} and Astrologer: ${astrologerId}`);
-    
+
     // Notify client
     const clientSocketId = connectedUsers[clientId];
     if (clientSocketId) {
@@ -250,7 +254,7 @@ io.on('connection', (socket) => {
     try {
       const ChatMessage = require('./models/ChatMessage');
       const Consultation = require('./models/Consultation');
-      
+
       const chatMsg = new ChatMessage({
         sessionId,
         senderId,
@@ -295,7 +299,7 @@ io.on('connection', (socket) => {
     console.log(`Socket disconnected: ${socket.id}`);
     if (socket.userId) {
       delete connectedUsers[socket.userId];
-      
+
       // Auto toggle offline if user was an astrologer
       try {
         const user = await User.findById(socket.userId);
