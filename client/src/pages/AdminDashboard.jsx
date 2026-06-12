@@ -6,7 +6,7 @@ import {
   Trash2, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Edit, Power, ArrowLeftRight, MessageSquare 
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');

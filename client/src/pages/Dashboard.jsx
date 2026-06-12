@@ -78,7 +78,8 @@ const Dashboard = () => {
   };
 
   const playAudio = (consultation) => {
-    const url = `http://localhost:5000${consultation.audioUrl}`;
+    const serverBase = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
+    const url = `${serverBase}${consultation.audioUrl}`;
     setActiveAudioSrc(url);
     setActiveConsultationId(consultation._id);
   };

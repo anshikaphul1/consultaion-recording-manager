@@ -216,8 +216,9 @@ const ClientDetail = () => {
         });
         setConsultations(consultations.map(c => c._id === selectedConsultation._id ? response.data : c));
         // Reset player if active audio updated
+        const serverBase = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
         if (activeConsultationId === selectedConsultation._id) {
-          setActiveAudioSrc(response.data.audioUrl ? `http://localhost:5000${response.data.audioUrl}` : '');
+          setActiveAudioSrc(response.data.audioUrl ? `${serverBase}${response.data.audioUrl}` : '');
         }
       }
       setShowModal(false);
@@ -246,7 +247,8 @@ const ClientDetail = () => {
   };
 
   const playAudio = (consultation) => {
-    const url = `http://localhost:5000${consultation.audioUrl}`;
+    const serverBase = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
+    const url = `${serverBase}${consultation.audioUrl}`;
     setActiveAudioSrc(url);
     setActiveConsultationId(consultation._id);
   };

@@ -7,7 +7,7 @@ import {
   User, CheckCircle, RefreshCw, Star, MessageSquare, PhoneCall, AlertTriangle, Eye, Send 
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const ClientDashboard = () => {
   const { 

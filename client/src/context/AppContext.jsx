@@ -4,12 +4,32 @@ import axios from 'axios';
 
 export const AppContext = createContext();
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export const AppProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const userString = localStorage.getItem('admin_user');
-    return userString ? JSON.parse(userString) : null;
+    if (!userString) return null;
+    try {
+      const parsed = JSON.parse(userString);
+      if (parsed && !parsed.userId) {
+        const token = localStorage.getItem('admin_token');
+        if (token) {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (payload && payload.userId) {
+              parsed.userId = payload.userId;
+              localStorage.setItem('admin_user', JSON.stringify(parsed));
+            }
+          }
+        }
+      }
+      return parsed;
+    } catch (e) {
+      console.error('Error parsing user from localStorage:', e);
+      return null;
+    }
   });
   
   const [walletBalance, setWalletBalance] = useState(0);
@@ -47,7 +67,7 @@ export const AppProvider = ({ children }) => {
   // Initialize Socket on login
   useEffect(() => {
     if (user) {
-      const socketUrl = 'http://localhost:5000';
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
       const newSocket = io(socketUrl);
       setSocket(newSocket);
 
@@ -398,6 +418,7 @@ export const AppProvider = ({ children }) => {
       walletBalance,
       fetchWalletBalance,
       rechargeWallet,
+      socket,
       activeCall,
       chatMessages,
       initiateCall,

@@ -90,6 +90,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       token,
       user: {
+        userId: newUser._id,
         username: newUser.username,
         name: newUser.name,
         role: newUser.role,
@@ -138,6 +139,7 @@ router.post('/login', async (req, res) => {
     res.json({
       token,
       user: {
+        userId: user._id,
         username: user.username,
         name: user.name,
         role: user.role,
