@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import AudioPlayer from '../components/AudioPlayer';
 import { 
   Users, Award, Clock, DollarSign, Calendar, Eye, 
   Trash2, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Edit, Power, ArrowLeftRight, MessageSquare 
@@ -37,6 +38,49 @@ const AdminDashboard = () => {
 
   const token = localStorage.getItem('admin_token');
   const headers = { Authorization: `Bearer ${token}` };
+
+  // Playback Modal States
+  const [playbackSession, setPlaybackSession] = useState(null);
+  const [playbackTranscript, setPlaybackTranscript] = useState([]);
+  const [playbackAudioUrl, setPlaybackAudioUrl] = useState(null);
+  const [loadingPlayback, setLoadingPlayback] = useState(false);
+
+  const handleOpenPlayback = async (session) => {
+    setPlaybackSession(session);
+    setPlaybackTranscript([]);
+    setPlaybackAudioUrl(null);
+    setLoadingPlayback(true);
+    
+    try {
+      if (session.chatTranscriptAvailable) {
+        const transcriptRes = await axios.get(`${API_BASE}/sessions/${session._id}/chat`, { headers });
+        setPlaybackTranscript(transcriptRes.data);
+      }
+      
+      if (session.recordingUrl) {
+        const audioRes = await axios.get(`${API_BASE}/sessions/${session._id}/recording`, {
+          headers,
+          responseType: 'blob'
+        });
+        const localUrl = URL.createObjectURL(audioRes.data);
+        setPlaybackAudioUrl(localUrl);
+      }
+    } catch (err) {
+      console.error('Failed to load session details:', err);
+    } finally {
+      setLoadingPlayback(false);
+    }
+  };
+
+  const handleClosePlayback = () => {
+    if (playbackAudioUrl) {
+      URL.revokeObjectURL(playbackAudioUrl);
+    }
+    setPlaybackSession(null);
+    setPlaybackTranscript([]);
+    setPlaybackAudioUrl(null);
+  };
+
 
   useEffect(() => {
     fetchOverviewMetrics();
@@ -620,6 +664,7 @@ const AdminDashboard = () => {
                       <th>Date</th>
                       <th>Duration</th>
                       <th>Amount Charged</th>
+                      <th>Recording & Transcript</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -631,6 +676,18 @@ const AdminDashboard = () => {
                         <td>{new Date(c.date).toLocaleString()}</td>
                         <td>{formatDuration(c.duration)}</td>
                         <td className="text-emerald font-bold">₹{c.amount}</td>
+                        <td>
+                          {(c.recordingUrl || c.chatTranscriptAvailable) ? (
+                            <button 
+                              onClick={() => handleOpenPlayback(c)}
+                              className="btn btn-secondary btn-sm flex items-center gap-1.5 py-1 text-xs text-primary-hover border-primary/20 bg-primary/5 hover:bg-primary/10"
+                            >
+                              <Eye size={12} /> Playback
+                            </button>
+                          ) : (
+                            <span className="text-text-muted text-[11px] italic">Not available</span>
+                          )}
+                        </td>
                         <td>
                           <span className={`badge ${c.status === 'Completed' ? 'badge-success' : 'badge-warning'}`}>
                             {c.status}
@@ -729,6 +786,89 @@ const AdminDashboard = () => {
 
         </main>
       </div>
+
+      {/* MODAL 4: CONSULTATION SESSION PLAYBACK MODAL */}
+      {playbackSession && (
+        <div className="modal-overlay">
+          <div className="glass-card modal-content p-6 max-w-[550px] w-full flex flex-col gap-4 border-gold/30">
+            <div className="flex justify-between items-center border-b border-white/5 pb-3">
+              <div>
+                <h3 className="font-heading font-bold text-lg text-gold">Consultation Playback</h3>
+                <p className="text-text-secondary text-xs">
+                  Session: {playbackSession.client?.name || 'Deleted Client'} &harr; {playbackSession.astrologer?.name}
+                </p>
+              </div>
+              <button onClick={handleClosePlayback} className="btn btn-secondary btn-sm py-1 px-3">Close</button>
+            </div>
+
+            {loadingPlayback ? (
+              <div className="text-center py-10 text-text-muted animate-pulse">Loading session details...</div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {/* Audio Recording Player */}
+                {playbackSession.recordingUrl ? (
+                  <div className="bg-white/5 p-3 rounded-lg border border-white/5">
+                    <span className="text-[10px] text-text-secondary uppercase font-bold tracking-wider block mb-2">Recorded Call Audio</span>
+                    {playbackAudioUrl ? (
+                      <AudioPlayer src={playbackAudioUrl} />
+                    ) : (
+                      <span className="text-xs text-text-muted">Loading audio file...</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white/5 p-3 rounded-lg border border-white/5 text-center text-xs text-text-muted">
+                    No audio call recording available for this session.
+                  </div>
+                )}
+
+                {/* Chat Transcript Panel */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-[10px] text-text-secondary uppercase font-bold tracking-wider block">Chat Transcript</span>
+                  {playbackSession.chatTranscriptAvailable ? (
+                    <div className="h-[250px] overflow-y-auto bg-black/20 rounded-lg border border-white/5 p-3 flex flex-col gap-2">
+                      {playbackTranscript.map((msg) => {
+                        const isClient = msg.senderRole === 'client';
+                        return (
+                          <div
+                            key={msg._id}
+                            className={`flex flex-col max-w-[80%] ${isClient ? 'self-end items-end' : 'self-start items-start'}`}
+                          >
+                            <span className="text-[9px] text-text-muted mb-0.5 px-1 font-semibold">
+                              {isClient 
+                                ? (playbackSession.client?.name || 'Client') 
+                                : (playbackSession.astrologer?.name || 'Astrologer')}
+                            </span>
+                            <div
+                              className={`p-2 rounded-xl text-xs ${
+                                isClient
+                                  ? 'bg-primary text-white rounded-tr-none'
+                                  : 'bg-white/10 text-text-primary rounded-tl-none border border-white/5'
+                              }`}
+                            >
+                              {msg.message}
+                            </div>
+                            <span className="text-[8px] text-text-muted mt-0.5 px-1">
+                              {new Date(msg.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {playbackTranscript.length === 0 && (
+                        <div className="text-center text-text-muted text-xs py-8">Transcript is empty.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-white/5 p-3 rounded-lg border border-white/5 text-center text-xs text-text-muted">
+                      No chat message logs available for this session.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

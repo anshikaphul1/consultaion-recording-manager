@@ -33,12 +33,20 @@ const consultationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Scheduled', 'Completed', 'Cancelled'],
+    enum: ['Scheduled', 'Live', 'Completed', 'Cancelled'],
     default: 'Completed'
   },
   amount: {
     type: Number,
     default: 0
+  },
+  recordingUrl: {
+    type: String,
+    default: null
+  },
+  chatTranscriptAvailable: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

@@ -22,10 +22,27 @@ export const AppProvider = ({ children }) => {
     role: null, // 'client' | 'astrologer'
     partner: null, // { id, name }
     timer: 0,
-    ratePerMin: 10
+    ratePerMin: 10,
+    sessionId: null
   });
 
+  const [chatMessages, setChatMessages] = useState([]);
+
   const timerIntervalRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const currentSessionIdRef = useRef(null);
+
+  // Stop media recording and release microphone
+  const stopRecordingAndUpload = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+  };
 
   // Initialize Socket on login
   useEffect(() => {
@@ -48,7 +65,8 @@ export const AppProvider = ({ children }) => {
         setSocket(null);
       }
       setWalletBalance(0);
-      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
+      setChatMessages([]);
     }
   }, [user]);
 
@@ -128,42 +146,129 @@ export const AppProvider = ({ children }) => {
         role: 'astrologer',
         partner: { id: clientId, name: clientName },
         timer: 0,
-        ratePerMin: 10 // astrologer's own rate
+        ratePerMin: 10, // astrologer's own rate
+        sessionId: null
       });
     });
 
-    socket.on('call-accepted', ({ astrologerId }) => {
-      console.log('Call accepted by astrologer.');
-      setActiveCall((prev) => ({ ...prev, status: 'connected' }));
+    socket.on('call-accepted', ({ astrologerId, sessionId }) => {
+      console.log('Call accepted by astrologer, session:', sessionId);
+      setActiveCall((prev) => ({ ...prev, status: 'connected', sessionId }));
+      setChatMessages([]);
       startCallTimer();
+    });
+
+    socket.on('call-started', ({ clientId, sessionId }) => {
+      console.log('Call started on astrologer side, session:', sessionId);
+      setActiveCall((prev) => ({ ...prev, status: 'connected', sessionId }));
+      setChatMessages([]);
     });
 
     socket.on('call-rejected', () => {
       console.log('Call rejected by astrologer.');
       alert('The astrologer has declined the call.');
-      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
+      setChatMessages([]);
     });
 
     socket.on('call-terminated', () => {
       console.log('Call ended.');
       stopCallTimer();
-      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+      stopRecordingAndUpload();
+      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
       fetchWalletBalance();
     });
 
     socket.on('call-error', ({ message }) => {
       alert(message);
-      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+      stopRecordingAndUpload();
+      setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
+    });
+
+    socket.on('chat-message-receive', (payload) => {
+      console.log('Chat message received in context:', payload);
+      setChatMessages((prev) => [...prev, payload]);
     });
 
     return () => {
       socket.off('incoming-call');
       socket.off('call-accepted');
+      socket.off('call-started');
       socket.off('call-rejected');
       socket.off('call-terminated');
       socket.off('call-error');
+      socket.off('chat-message-receive');
     };
   }, [socket, walletBalance]);
+
+  // Handle call audio recording start
+  useEffect(() => {
+    let activeStream = null;
+    const startRecording = async () => {
+      if (activeCall.status === 'connected' && activeCall.sessionId) {
+        currentSessionIdRef.current = activeCall.sessionId;
+        try {
+          console.log('Requesting microphone permission...');
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioStreamRef.current = stream;
+          activeStream = stream;
+          
+          const recorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = recorder;
+          audioChunksRef.current = [];
+          
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+          
+          recorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const sessionId = currentSessionIdRef.current;
+            if (audioBlob.size > 0 && sessionId) {
+              try {
+                const token = localStorage.getItem('admin_token');
+                const formData = new FormData();
+                formData.append('audio', audioBlob, `recording-${sessionId}.webm`);
+                
+                console.log(`Uploading audio recording for session ${sessionId}...`);
+                await axios.post(`${API_BASE}/sessions/${sessionId}/recording`, formData, {
+                  headers: {
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`
+                  }
+                });
+                console.log('Audio recording uploaded successfully.');
+              } catch (err) {
+                console.error('Failed to upload audio recording:', err);
+              }
+            }
+            audioChunksRef.current = [];
+            mediaRecorderRef.current = null;
+            audioStreamRef.current = null;
+          };
+          
+          recorder.start();
+          console.log('Started client-side call recording.');
+        } catch (err) {
+          console.warn('Microphone access denied or failed to initialize recording:', err);
+        }
+      }
+    };
+
+    startRecording();
+
+    // Clean up if we unmount
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (activeStream) {
+        activeStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [activeCall.status, activeCall.sessionId]);
 
   // Client Initiates Call
   const initiateCall = (astrologerId, astrologerName, ratePerMin) => {
@@ -180,7 +285,8 @@ export const AppProvider = ({ children }) => {
       role: 'client',
       partner: { id: astrologerId, name: astrologerName },
       timer: 0,
-      ratePerMin
+      ratePerMin,
+      sessionId: null
     });
 
     socket.emit('call-request', {
@@ -211,7 +317,7 @@ export const AppProvider = ({ children }) => {
       clientId: activeCall.partner.id
     });
 
-    setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+    setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
   };
 
   // End active call (Client or Astrologer)
@@ -221,19 +327,22 @@ export const AppProvider = ({ children }) => {
     const clientId = activeCall.role === 'client' ? user.userId : activeCall.partner.id;
     const astrologerId = activeCall.role === 'client' ? activeCall.partner.id : user.astrologerRef;
     const finalTimer = activeCall.timer;
+    const sessionId = activeCall.sessionId;
 
     // Trigger socket end call signaling
     socket.emit('call-end', { clientId, astrologerId });
 
     // Stop timer locally
     stopCallTimer();
-    setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10 });
+    stopRecordingAndUpload();
+    setActiveCall({ status: 'idle', role: null, partner: null, timer: 0, ratePerMin: 10, sessionId: null });
 
     // Call backend API to deduct funds and log session
-    if (finalTimer > 0) {
+    if (finalTimer > 0 && sessionId) {
       try {
         const token = localStorage.getItem('admin_token');
         await axios.post(`${API_BASE}/consultations/call/end`, {
+          sessionId,
           clientId,
           astrologerId,
           durationSeconds: finalTimer
@@ -245,6 +354,30 @@ export const AppProvider = ({ children }) => {
         console.error('Failed to log consultation session details:', e);
       }
     }
+  };
+
+  // Send real-time chat message
+  const sendChatMessage = (messageText) => {
+    if (!socket || !activeCall.sessionId || !user) return;
+    const senderId = user.userId;
+    const senderRole = user.role === 'astrologer' ? 'astrologer' : 'client';
+    
+    socket.emit('chat-message', {
+      sessionId: activeCall.sessionId,
+      message: messageText,
+      senderId,
+      senderRole
+    });
+
+    const localMsg = {
+      _id: 'temp-' + Date.now(),
+      sessionId: activeCall.sessionId,
+      message: messageText,
+      senderId,
+      senderRole,
+      timestamp: new Date().toISOString()
+    };
+    setChatMessages((prev) => [...prev, localMsg]);
   };
 
   const login = (userData) => {
@@ -266,10 +399,12 @@ export const AppProvider = ({ children }) => {
       fetchWalletBalance,
       rechargeWallet,
       activeCall,
+      chatMessages,
       initiateCall,
       acceptIncomingCall,
       rejectIncomingCall,
-      endActiveCall
+      endActiveCall,
+      sendChatMessage
     }}>
       {children}
     </AppContext.Provider>

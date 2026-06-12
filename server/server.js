@@ -45,6 +45,7 @@ const consultationRoutes = require('./routes/consultations');
 const dashboardRoutes = require('./routes/dashboard');
 const walletRoutes = require('./routes/wallet');
 const reviewRoutes = require('./routes/reviews');
+const sessionRoutes = require('./routes/sessions');
 
 // Apply routes
 app.use('/api/auth', authRoutes);
@@ -54,6 +55,7 @@ app.use('/api/consultations', consultationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -171,11 +173,43 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('call-accept', ({ clientId, astrologerId }) => {
+  socket.on('call-accept', async ({ clientId, astrologerId }) => {
     console.log(`Call accepted by Astrologer ${astrologerId} for Client: ${clientId}`);
-    const targetSocketId = connectedUsers[clientId];
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('call-accepted', { astrologerId });
+    try {
+      const clientUser = await User.findById(clientId);
+      if (!clientUser) {
+        return socket.emit('call-error', { message: 'Client account not found.' });
+      }
+
+      // Create a Live Consultation record immediately so we have a sessionId for real-time chat
+      const Consultation = require('./models/Consultation');
+      const session = new Consultation({
+        client: clientUser.clientRef || clientId,
+        astrologer: astrologerId,
+        date: new Date(),
+        duration: 0,
+        amount: 0,
+        status: 'Live',
+        notes: 'Live call consultation session initiated.'
+      });
+      await session.save();
+
+      // Send sessionId back to both participants
+      const clientSocketId = connectedUsers[clientId];
+      if (clientSocketId) {
+        io.to(clientSocketId).emit('call-accepted', { astrologerId, sessionId: session._id.toString() });
+      }
+
+      const astroUser = await User.findOne({ astrologerRef: astrologerId });
+      if (astroUser) {
+        const astroSocketId = connectedUsers[astroUser._id.toString()];
+        if (astroSocketId) {
+          io.to(astroSocketId).emit('call-started', { clientId, sessionId: session._id.toString() });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to initialize live session:', err);
+      socket.emit('call-error', { message: 'Failed to start live call session.' });
     }
   });
 
@@ -207,6 +241,53 @@ io.on('connection', (socket) => {
       }
     } catch (e) {
       console.error(e);
+    }
+  });
+
+  // Real-time Chat Messaging
+  socket.on('chat-message', async ({ sessionId, message, senderId, senderRole }) => {
+    console.log(`Chat message in session ${sessionId} from ${senderId} (${senderRole}): ${message}`);
+    try {
+      const ChatMessage = require('./models/ChatMessage');
+      const Consultation = require('./models/Consultation');
+      
+      const chatMsg = new ChatMessage({
+        sessionId,
+        senderId,
+        senderRole,
+        message
+      });
+      await chatMsg.save();
+
+      // Update session to flag that chat transcript is available
+      await Consultation.findByIdAndUpdate(sessionId, { chatTranscriptAvailable: true });
+
+      const session = await Consultation.findById(sessionId);
+      if (session) {
+        const clientUser = await User.findOne({ clientRef: session.client });
+        const astroUser = await User.findOne({ astrologerRef: session.astrologer });
+
+        const payload = {
+          _id: chatMsg._id,
+          sessionId,
+          message,
+          senderId,
+          senderRole,
+          timestamp: chatMsg.timestamp
+        };
+
+        if (clientUser && clientUser._id.toString() !== senderId) {
+          const clientSocket = connectedUsers[clientUser._id.toString()];
+          if (clientSocket) io.to(clientSocket).emit('chat-message-receive', payload);
+        }
+
+        if (astroUser && astroUser._id.toString() !== senderId) {
+          const astroSocket = connectedUsers[astroUser._id.toString()];
+          if (astroSocket) io.to(astroSocket).emit('chat-message-receive', payload);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to process chat message:', e);
     }
   });
 

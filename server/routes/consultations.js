@@ -267,7 +267,7 @@ const Astrologer = require('../models/Astrologer');
 // POST /api/consultations/call/end - End session, deduct wallet, create transactions
 router.post('/call/end', async (req, res) => {
   try {
-    const { clientId, astrologerId, durationSeconds } = req.body;
+    const { clientId, astrologerId, durationSeconds, sessionId } = req.body;
     if (!clientId || !astrologerId || durationSeconds === undefined) {
       return res.status(400).json({ message: 'clientId, astrologerId, and durationSeconds are required.' });
     }
@@ -324,21 +324,35 @@ router.post('/call/end', async (req, res) => {
         status: 'Success',
         description: `Earnings from consultation with ${clientUser.name} for ${durationMins} mins`
       });
-      await astroTx.save();
+      const astroTxDoc = await astroTx.save();
     }
 
-    // Save consultation record
-    const consultation = new Consultation({
-      client: clientUser.clientRef || clientId, // Use clientRef if exists, else fallback
-      astrologer: astrologerId,
-      date: new Date(),
-      duration: durationSeconds,
-      amount: totalCost,
-      notes: `Call consultation. Duration: ${durationMins} mins. Charged: ₹${totalCost}`,
-      status: 'Completed',
-      tags: ['Live Call']
-    });
-    await consultation.save();
+    // Save or update consultation record
+    let consultation = null;
+    if (sessionId) {
+      consultation = await Consultation.findById(sessionId);
+      if (consultation) {
+        consultation.duration = durationSeconds;
+        consultation.amount = totalCost;
+        consultation.status = 'Completed';
+        consultation.notes = `Call consultation. Duration: ${durationMins} mins. Charged: ₹${totalCost}`;
+        await consultation.save();
+      }
+    }
+
+    if (!consultation) {
+      consultation = new Consultation({
+        client: clientUser.clientRef || clientId, // Use clientRef if exists, else fallback
+        astrologer: astrologerId,
+        date: new Date(),
+        duration: durationSeconds,
+        amount: totalCost,
+        notes: `Call consultation. Duration: ${durationMins} mins. Charged: ₹${totalCost}`,
+        status: 'Completed',
+        tags: ['Live Call']
+      });
+      await consultation.save();
+    }
 
     res.status(201).json({
       message: 'Call ended and transaction processed.',
